@@ -1,4 +1,6 @@
-# erlcaptcha - reCAPTCHA validation for Erlang/OTP applications
+# erlcaptcha
+[![Build Status](https://travis-ci.org/ClicaAi/erlcaptcha.svg?branch=master)](https://travis-ci.org/ClicaAi/erlcaptcha)
+[![hex version](https://img.shields.io/hexpm/v/erlcaptcha.svg)](https://hex.pm/packages/erlcaptcha)  
 
 `erlcaptcha` is an OTP Application that is able to verify reCAPTCHA (v2 and v3) responses from Erlang applications.
 
