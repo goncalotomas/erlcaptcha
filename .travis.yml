@@ -1,0 +1,11 @@
+sudo: false
+dist: trusty
+language: erlang
+otp_release:
+  - 21.1
+install:
+  - rebar3 compile
+script:
+  - rebar3 xref
+  - rebar3 dialyzer
+  - rebar3 eunit

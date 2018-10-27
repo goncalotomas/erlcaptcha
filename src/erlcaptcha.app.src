@@ -1,0 +1,19 @@
+{application, erlcaptcha,
+ [{description, "Erlang reCAPTCHA validator"},
+  {vsn, "1.0.0"},
+  {registered, []},
+  {mod, { erlcaptcha_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    hackney,
+    jsx
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {maintainers, []},
+  {licenses, ["Apache 2.0"]},
+  {maintainers, ["Goncalo Tomas"]},
+  {links,[{"Github","https://github.com/ClicaAi/erlcaptcha"}]}
+ ]}.
