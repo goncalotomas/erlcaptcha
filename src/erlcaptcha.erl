@@ -1,20 +1,12 @@
 %% Server validation module for Google's reCAPTCHA API (compatible with v2)
 -module(erlcaptcha).
 
--behaviour(gen_server).
-
 %% API
--export([start_link/0, stop/0, verify/1, verify/2]).
-%% gen_server exports
--export([init/1, handle_cast/2, handle_call/3]).
+-export([verify/1, verify/2]).
 
 -define(SERVER, ?MODULE).
--define(API_ENDPOINT, <<"https://www.google.com/recaptcha/api/siteverify">>).
+-define(API_ENDPOINT, "https://www.google.com/recaptcha/api/siteverify").
 -define(APP, erlcaptcha).
-
--record(state, {
-    secret :: binary() | undefined
-}).
 
 -type success_resp() :: list(success_params()).
 -type success_params() :: {success, boolean()} |
@@ -27,47 +19,22 @@
                        invalid_input_response |
                        bad_request.
 
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-stop() ->
-    gen_server:stop(?SERVER).
-
-init([]) ->
-    Secret = case application:get_env(?APP, secret) of
-        undefined -> undefined;
-        {ok, Value} -> Value
-    end,
-    {ok, #state{secret = Secret}}.
-
 -spec verify(binary()) -> success_resp() | error_resp().
 verify(Response) ->
-    gen_server:call(?SERVER, {verify, Response}).
+    {ok, Secret} = application:get_env(?APP, secret),
+    api_req(uri_string:compose_query([{"secret", Secret}, {"response", Response}])).
 
 -spec verify(binary(), binary()) -> success_resp() | error_resp().
 verify(Response, RemoteIP) ->
-    gen_server:call(?SERVER, {verify, Response, RemoteIP}).
+    {ok, Secret} = application:get_env(?APP, secret),
+    api_req(uri_string:compose_query([{"secret", Secret}, {"response", Response}, {"remoteip", RemoteIP}])).
 
-handle_cast(_Msg, State) ->
-    {noreply, State}.
-
-handle_call({verify, Response}, _From, State) ->
-    Secret = State#state.secret,
-    Payload = {form, [{secret, Secret}, {response, Response}]},
-    {ok, _StatusCode, _RespHeaders, ClientRef} = hackney:post(?API_ENDPOINT, [], Payload, []),
-    {ok, Body} = hackney:body(ClientRef),
-    Json = jsx:decode(Body),
-    Reply = resp_from_json(Json),
-    {reply, Reply, State};
-
-handle_call({verify, Response, RemoteIP}, _From, State) ->
-    Secret = State#state.secret,
-    Payload = {form, [{secret, Secret}, {response, Response}, {remoteip, RemoteIP}]},
-    {ok, _StatusCode, _RespHeaders, ClientRef} = hackney:post(?API_ENDPOINT, [], Payload, []),
-    {ok, Body} = hackney:body(ClientRef),
-    Json = jsx:decode(Body),
-    Reply = resp_from_json(Json),
-    {reply, Reply, State}.
+api_req(ReqBody) ->
+    ReqOpts = [{sync, true}, {body_format, binary}],
+    ContentType = "application/x-www-form-urlencoded",
+    {ok, {_RespCode, _RespHeaders, Body}} = httpc:request(post, {?API_ENDPOINT, [], ContentType, ReqBody}, [], ReqOpts),
+    io:format("decoding ~p...~n", [binary_to_list(Body)]),
+    resp_from_json(jsx:decode(Body)).
 
 resp_from_json(Json) ->
     case proplists:get_value(<<"error-codes">>, Json) of
@@ -95,51 +62,38 @@ parse_error(<<"missing-input-response">>) ->    missing_input_response;
 parse_error(<<"invalid-input-response">>) ->    invalid_input_response;
 parse_error(<<"bad-request">>) ->               bad_request.
 
-
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 %% this is a publicly listed test secret key from Google, so don't panic. We won't post secret keys on GitHub.
--define(TEST_SECRET, <<"6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe">>).
+-define(TEST_SECRET, "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe").
 
 invalid_response_test() ->
     application:ensure_all_started(jsx),
-    application:ensure_all_started(hackney),
     %% notice how we are NOT setting a valid secret value
     %% this is required because the test key considers all requests to be successful
-    %% application:set_env(?APP, secret, ?TEST_SECRET),
-    ?MODULE:start_link(),
-    ?assertEqual({errors, [invalid_input_response, invalid_input_secret]}, ?MODULE:verify(<<"someResponse">>)),
-    ?MODULE:stop(),
+    application:set_env(?APP, secret, ""),
+    ?assertEqual({errors, [invalid_input_response, invalid_input_secret]}, ?MODULE:verify("someResponse")),
     ok.
 
 missing_response_test() ->
     application:ensure_all_started(jsx),
-    application:ensure_all_started(hackney),
     %% notice how we are NOT setting a valid secret value
     %% this is required because the test key considers all requests to be successful
-    %% application:set_env(?APP, secret, ?TEST_SECRET),
-    ?MODULE:start_link(),
-    ?assertEqual({errors, [missing_input_response, invalid_input_secret]}, ?MODULE:verify(<<>>)),
-    ?MODULE:stop(),
+    application:set_env(?APP, secret, ""),
+    ?assertEqual({errors, [missing_input_response, invalid_input_secret]}, ?MODULE:verify("")),
     ok.
 
 invalid_secret_test() ->
     application:ensure_all_started(jsx),
-    application:ensure_all_started(hackney),
-    application:set_env(?APP, secret, <<"someSecretThatIsVeryUnlikelyToBeValid">>),
-    ?MODULE:start_link(),
-    ?assertEqual({errors, [missing_input_response, invalid_input_secret]}, ?MODULE:verify(<<>>)),
-    ?MODULE:stop(),
+    application:set_env(?APP, secret, "someSecretThatIsVeryUnlikelyToBeValid"),
+    ?assertEqual({errors, [missing_input_response, invalid_input_secret]}, ?MODULE:verify("")),
     ok.
 
 successful_response_test() ->
     application:ensure_all_started(jsx),
-    application:ensure_all_started(hackney),
     application:set_env(?APP, secret, ?TEST_SECRET),
-    ?MODULE:start_link(),
-    ?assert(is_successful(?MODULE:verify(<<"someResponse">>, <<"127.0.0.1">>))),
-    ?assert(is_successful(?MODULE:verify(<<"someOtherResponse">>))),
-    ?MODULE:stop(),
+    ?assert(is_successful(?MODULE:verify("someResponse", "127.0.0.1"))),
+    ?assert(is_successful(?MODULE:verify("someOtherResponse"))),
     ok.
 
 is_successful(Proplist) ->
