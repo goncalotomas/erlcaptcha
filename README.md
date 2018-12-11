@@ -30,6 +30,19 @@ If this does not work for you, you can manually set the application environment 
 application:set_env(erlcaptcha, secret, ?YOUR_SECRET_RECAPTCHA_API_KEY).
 ```
 
+And then using erlcaptcha from within your code
+
+```erl
+%% notice we only work with strings
+CltResp = "someTokenReceivedFromFrontEnd",
+%% fetch reCAPTCHA result only with token
+[{success, Suc}, {challenge_ts, Tstamp}, {hostname, Host}, {score, Score}, {action, Action}] = erlcaptcha:verify(CltResp).
+
+%% alternatively, provide the client's IP address
+Addr = "172.10.33.57",
+[{success, Suc}, {challenge_ts, Tstamp}, {hostname, Host}, {score, Score}, {action, Action}] = erlcaptcha:verify(CltResp, Addr).
+```
+
 ### API
 - `verify/1`, `verify/2`: submits an HTTP POST request to the reCAPTCHA API passing in the response you received from the frontend, and optionally the client's IP as well.
 
